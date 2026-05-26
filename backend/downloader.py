@@ -137,11 +137,25 @@ def parse_info_response(info, url):
 
 # YouTube client strategies to try in order (to bypass bot detection)
 _YT_CLIENT_STRATEGIES = [
-    {'extractor_args': {'youtube': {'player_client': ['tv_embedded']}}},
-    {'extractor_args': {'youtube': {'player_client': ['web_creator']}}},
-    {'extractor_args': {'youtube': {'player_client': ['mweb']}}},
-    {'extractor_args': {'youtube': {'player_client': ['ios']}}},
-    {},  # default client as final fallback
+    # 1. Try tv_embedded client WITHOUT cookies first (highly effective on datacenters)
+    {'extractor_args': {'youtube': {'player_client': ['tv_embedded']}}, 'use_cookies': False},
+    # 2. Try android client WITHOUT cookies
+    {'extractor_args': {'youtube': {'player_client': ['android']}}, 'use_cookies': False},
+    # 3. Try ios client WITHOUT cookies
+    {'extractor_args': {'youtube': {'player_client': ['ios']}}, 'use_cookies': False},
+    # 4. Try web_creator client WITHOUT cookies
+    {'extractor_args': {'youtube': {'player_client': ['web_creator']}}, 'use_cookies': False},
+    # 5. Try default client WITHOUT cookies
+    {'extractor_args': {}, 'use_cookies': False},
+    
+    # 6. Try tv_embedded WITH cookies
+    {'extractor_args': {'youtube': {'player_client': ['tv_embedded']}}, 'use_cookies': True},
+    # 7. Try android WITH cookies
+    {'extractor_args': {'youtube': {'player_client': ['android']}}, 'use_cookies': True},
+    # 8. Try ios WITH cookies
+    {'extractor_args': {'youtube': {'player_client': ['ios']}}, 'use_cookies': True},
+    # 9. Try default client WITH cookies
+    {'extractor_args': {}, 'use_cookies': True},
 ]
 
 
@@ -157,16 +171,22 @@ def get_video_info(url):
     ffmpeg_dir = get_ffmpeg_path()
     last_error = None
 
-    for strategy in _YT_CLIENT_STRATEGIES:
+    for item in _YT_CLIENT_STRATEGIES:
+        strategy = item['extractor_args']
+        use_cookies = item['use_cookies']
+
         ydl_opts = {
             'skip_download': True,
             'quiet': True,
             'no_warnings': True,
         }
-        ydl_opts.update(strategy)
+        if strategy:
+            ydl_opts.update(strategy)
 
-        if os.path.exists(cookies_path):
+        # Apply cookies only if requested and file exists
+        if use_cookies and os.path.exists(cookies_path):
             ydl_opts['cookiefile'] = cookies_path
+            
         if ffmpeg_dir:
             ydl_opts['ffmpeg_location'] = ffmpeg_dir
 
@@ -180,7 +200,7 @@ def get_video_info(url):
             if not _is_bot_error(error_msg):
                 # Non-bot error (e.g. private video, invalid URL) — fail fast
                 raise e
-            print(f"[info] Strategy {strategy} failed (bot check): {error_msg[:120]}. Trying next...")
+            print(f"[info] Strategy {item} failed: {error_msg[:120]}. Trying next...")
             continue
 
     raise Exception(f"All fetch strategies failed. Last error: {str(last_error)[:400]}")
@@ -220,16 +240,20 @@ def download_video_sync(url, resolution_id, output_dir, reporter):
         base_opts['merge_output_format'] = 'mp4'
     if postprocessors:
         base_opts['postprocessors'] = postprocessors
-    if os.path.exists(cookies_path):
-        base_opts['cookiefile'] = cookies_path
     if ffmpeg_dir:
         base_opts['ffmpeg_location'] = ffmpeg_dir
 
     last_error = None
-    for strategy in _YT_CLIENT_STRATEGIES:
+    for item in _YT_CLIENT_STRATEGIES:
         ydl_opts = {**base_opts}
+        strategy = item['extractor_args']
+        use_cookies = item['use_cookies']
+
         if strategy:
             ydl_opts['extractor_args'] = strategy.get('extractor_args', {})
+
+        if use_cookies and os.path.exists(cookies_path):
+            ydl_opts['cookiefile'] = cookies_path
 
         try:
             with yt_dlp.YoutubeDL(ydl_opts) as ydl:
@@ -244,7 +268,7 @@ def download_video_sync(url, resolution_id, output_dir, reporter):
             error_msg = str(e)
             if not _is_bot_error(error_msg):
                 raise e
-            print(f"[download] Strategy {strategy} failed (bot check): {error_msg[:120]}. Trying next...")
+            print(f"[download] Strategy {item} failed: {error_msg[:120]}. Trying next...")
             continue
 
     raise Exception(f"All download strategies failed. Last error: {str(last_error)[:400]}")

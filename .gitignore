@@ -1,6 +1,8 @@
 # Windows binaries
 bin/
 *.zip
+cookies.txt
+backend/cookies.txt
 
 # Node dependencies & build artifacts
 node_modules/

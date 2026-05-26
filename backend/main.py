@@ -75,6 +75,51 @@ async def get_system_status():
         "ffmpeg_active": get_ffmpeg_path() is not None or os.name != 'nt'
     }
 
+@app.get("/api/test-clients")
+async def test_clients_endpoint():
+    import yt_dlp
+    
+    strategies = {
+        "ios_no_cookies": ({'youtube': {'player_client': ['ios']}}, False),
+        "tv_embedded_no_cookies": ({'youtube': {'player_client': ['tv_embedded']}}, False),
+        "web_creator_no_cookies": ({'youtube': {'player_client': ['web_creator']}}, False),
+        "mweb_no_cookies": ({'youtube': {'player_client': ['mweb']}}, False),
+        "web_embedded_no_cookies": ({'youtube': {'player_client': ['web_embedded']}}, False),
+        "android_no_cookies": ({'youtube': {'player_client': ['android']}}, False),
+        "android_vr_no_cookies": ({'youtube': {'player_client': ['android_vr']}}, False),
+        "tv_no_cookies": ({'youtube': {'player_client': ['tv']}}, False),
+        
+        "ios_with_cookies": ({'youtube': {'player_client': ['ios']}}, True),
+        "tv_embedded_with_cookies": ({'youtube': {'player_client': ['tv_embedded']}}, True),
+        "android_with_cookies": ({'youtube': {'player_client': ['android']}}, True),
+        "default_with_cookies": ({}, True),
+        "default_no_cookies": ({}, False),
+    }
+    
+    results = {}
+    cookies_path = os.path.join(backend_dir, "cookies.txt")
+    
+    for name, (args, use_cookies) in strategies.items():
+        ydl_opts = {
+            'skip_download': True,
+            'quiet': True,
+            'no_warnings': True,
+        }
+        if args:
+            ydl_opts['extractor_args'] = args
+            
+        if use_cookies and os.path.exists(cookies_path):
+            ydl_opts['cookiefile'] = cookies_path
+            
+        try:
+            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                info = ydl.extract_info("https://www.youtube.com/watch?v=jNQXAC9IVRw", download=False)
+                results[name] = f"SUCCESS: {info.get('title')}"
+        except Exception as e:
+            results[name] = f"FAILED: {str(e)[:150]}"
+            
+    return results
+
 @app.post("/api/save-cookies")
 async def save_cookies(req: CookiesRequest):
     try:

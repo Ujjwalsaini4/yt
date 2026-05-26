@@ -50,9 +50,25 @@ Open `http://localhost:5173` on your PC, or `http://<your-ip>:5173` on your mobi
 
 ---
 
-## 🚂 Railway Cloud Deployment
+## 🚀 Cloud Deployment (Railway or Render)
 
-1. Create a repository on GitHub and push the code.
-2. In Railway, click **New Project** -> **Deploy from GitHub repo**.
-3. Choose this repository. Railway will detect the `Dockerfile` and compile the app into a single Linux container (installing Node, Python, and system `ffmpeg` automatically).
-4. Assign a public domain under your Railway service settings, and you are live!
+This application is ready for zero-config deployment on either **Railway.app** or **Render.com** (including Render's Free tier).
+
+### Option A: Deploy on Render.com (Free Tier)
+1. Push this repository to your GitHub account.
+2. Sign in to [Render.com](https://render.com).
+3. Click **"New +"** -> **"Web Service"**.
+4. Choose **"Build and deploy from a Git repository"** and select your repository.
+5. In the settings:
+   - **Name**: `streamvault`
+   - **Language**: `Docker` (Render will automatically read the root `Dockerfile` to install dependencies and run the app).
+   - **Instance Type**: `Free`
+6. Click **"Create Web Service"**.
+7. Render will build the Docker container and give you a public URL (e.g. `https://streamvault.onrender.com`).
+
+### Option B: Deploy on Railway.app
+1. Push this repository to your GitHub account.
+2. Sign in to [Railway.app](https://railway.app).
+3. Click **"New Project"** -> **"Deploy from GitHub repo"** and select your repository.
+4. Railway will automatically build using the `Dockerfile` and start the server.
+5. Go to your project settings, click **"Generate Domain"** to get a public URL.

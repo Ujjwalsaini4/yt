@@ -2,6 +2,18 @@ import os
 import yt_dlp
 import asyncio
 
+def _ensure_cookies_file():
+    """Write cookies from YT_COOKIES env var to disk if file doesn't exist."""
+    backend_dir = os.path.dirname(os.path.abspath(__file__))
+    cookies_path = os.path.join(backend_dir, "cookies.txt")
+    if not os.path.exists(cookies_path):
+        cookies_env = os.environ.get("YT_COOKIES", "").strip()
+        if cookies_env:
+            with open(cookies_path, "w", encoding="utf-8") as f:
+                f.write(cookies_env)
+            print("[cookies] Wrote cookies.txt from YT_COOKIES environment variable.")
+    return cookies_path
+
 class DownloadProgressReporter:
     def __init__(self, loop, callback):
         self.loop = loop
@@ -134,9 +146,8 @@ def get_video_info(url):
         'no_warnings': True,
     }
     
-    # Check if local cookies.txt exists (allows custom cookie overrides to bypass bot check)
-    backend_dir = os.path.dirname(os.path.abspath(__file__))
-    cookies_path = os.path.join(backend_dir, "cookies.txt")
+    # Check if local cookies.txt exists (or write from env var)
+    cookies_path = _ensure_cookies_file()
     if os.path.exists(cookies_path):
         ydl_opts['cookiefile'] = cookies_path
         
@@ -204,9 +215,8 @@ def download_video_sync(url, resolution_id, output_dir, reporter):
     if postprocessors:
         ydl_opts['postprocessors'] = postprocessors
 
-    # Apply cookies if present
-    backend_dir = os.path.dirname(os.path.abspath(__file__))
-    cookies_path = os.path.join(backend_dir, "cookies.txt")
+    # Apply cookies if present (from file or env var)
+    cookies_path = _ensure_cookies_file()
     if os.path.exists(cookies_path):
         ydl_opts['cookiefile'] = cookies_path
 

@@ -16,7 +16,7 @@ async def delete_file_later(filepath: str, delay: int = 120):
     except Exception as e:
         print(f"Error auto-deleting file {filepath}: {e}")
 
-from downloader import get_video_info, download_video_sync, DownloadProgressReporter
+from downloader import get_video_info, download_video_sync, DownloadProgressReporter, _ensure_cookies_file
 
 app = FastAPI(title="All-Platform 4K Video Downloader API")
 

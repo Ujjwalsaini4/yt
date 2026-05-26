@@ -38,6 +38,9 @@ if not os.path.exists(DOWNLOAD_DIR):
 class InfoRequest(BaseModel):
     url: str
 
+class CookiesRequest(BaseModel):
+    cookies: str
+
 @app.post("/api/info")
 async def fetch_info(req: InfoRequest):
     if not req.url:
@@ -62,6 +65,32 @@ async def download_file(filename: str):
         media_type="application/octet-stream",
         filename=filename
     )
+
+@app.get("/api/status")
+async def get_system_status():
+    from downloader import get_ffmpeg_path
+    cookies_path = os.path.join(backend_dir, "cookies.txt")
+    return {
+        "cookies_active": os.path.exists(cookies_path),
+        "ffmpeg_active": get_ffmpeg_path() is not None or os.name != 'nt'
+    }
+
+@app.post("/api/save-cookies")
+async def save_cookies(req: CookiesRequest):
+    try:
+        cookies_path = os.path.join(backend_dir, "cookies.txt")
+        if not req.cookies.strip():
+            # If empty string, delete cookies.txt
+            if os.path.exists(cookies_path):
+                os.remove(cookies_path)
+            return {"status": "success", "message": "Cookies cleared."}
+        
+        # Write to cookies.txt in UTF-8
+        with open(cookies_path, "w", encoding="utf-8") as f:
+            f.write(req.cookies.strip())
+        return {"status": "success", "message": "Cookies saved successfully!"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to save cookies: {str(e)}")
 
 @app.websocket("/ws/download")
 async def websocket_endpoint(websocket: WebSocket):

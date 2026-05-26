@@ -16,7 +16,85 @@ export default function App() {
   const [downloadStatus, setDownloadStatus] = useState('');
   const [finishedFile, setFinishedFile] = useState(null);
   
+  // YouTube Bot Bypass States
+  const [showSettings, setShowSettings] = useState(false);
+  const [cookiesText, setCookiesText] = useState('');
+  const [cookiesActive, setCookiesActive] = useState(false);
+  const [saveSuccess, setSaveSuccess] = useState('');
+  
   const wsRef = useRef(null);
+
+  // Fetch cookie status on mount
+  useEffect(() => {
+    fetchStatus();
+  }, []);
+
+  const fetchStatus = async () => {
+    try {
+      const res = await fetch('/api/status');
+      if (res.ok) {
+        const data = await res.json();
+        setCookiesActive(data.cookies_active);
+      }
+    } catch (err) {
+      console.error("Failed to fetch system status:", err);
+    }
+  };
+
+  const handleSaveCookies = async (e) => {
+    e.preventDefault();
+    setSaveSuccess('');
+    setError('');
+    
+    try {
+      const res = await fetch('/api/save-cookies', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ cookies: cookiesText }),
+      });
+      
+      if (!res.ok) {
+        throw new Error('Failed to save cookies.');
+      }
+      
+      const data = await res.json();
+      setSaveSuccess(data.message);
+      setCookiesActive(!!cookiesText.trim());
+      if (!cookiesText.trim()) {
+        setCookiesText('');
+      }
+    } catch (err) {
+      setError(err.message || 'An error occurred while saving cookies.');
+    }
+  };
+
+  const handleClearCookies = async () => {
+    setCookiesText('');
+    setSaveSuccess('');
+    setError('');
+    
+    try {
+      const res = await fetch('/api/save-cookies', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ cookies: '' }),
+      });
+      
+      if (!res.ok) {
+        throw new Error('Failed to clear cookies.');
+      }
+      
+      const data = await res.json();
+      setSaveSuccess('Cookies cleared successfully.');
+      setCookiesActive(false);
+    } catch (err) {
+      setError(err.message || 'An error occurred while clearing cookies.');
+    }
+  };
 
   // Auto-select the highest available resolution when videoInfo loads
   useEffect(() => {
@@ -253,6 +331,110 @@ export default function App() {
                 </>
               )}
             </button>
+          </form>
+        </div>
+      )}
+
+      {/* Settings / Cookies Toggle Button */}
+      {!videoInfo && !finishedFile && !downloading && (
+        <div style={{ textAlign: 'right', marginBottom: '1.5rem', marginTop: '-1rem' }}>
+          <button 
+            onClick={() => setShowSettings(!showSettings)}
+            style={{
+              background: 'transparent',
+              border: 'none',
+              color: 'var(--text-muted)',
+              fontSize: '0.85rem',
+              cursor: 'pointer',
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '0.25rem',
+              textDecoration: 'underline'
+            }}
+          >
+            <svg style={{ width: '16px', height: '16px' }} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+              <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+            </svg>
+            <span>{showSettings ? 'Hide Bypass Settings' : 'Bypass YouTube Bot Check'}</span>
+            <span style={{ fontSize: '0.75rem', paddingLeft: '0.25rem', color: cookiesActive ? 'var(--accent-green)' : 'var(--text-muted)' }}>
+              ({cookiesActive ? '🟢 Active' : '⚪ Off'})
+            </span>
+          </button>
+        </div>
+      )}
+
+      {/* Settings Panel Content */}
+      {!videoInfo && !finishedFile && !downloading && showSettings && (
+        <div className="search-card" style={{ marginTop: '-1rem', marginBottom: '2rem', animation: 'fadeIn 0.3s ease-out' }}>
+          <h3 style={{ fontSize: '1.05rem', fontWeight: 700, marginBottom: '0.75rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+            <span className="pulse-indicator" style={{ background: cookiesActive ? 'var(--accent-green)' : 'var(--text-muted)', boxShadow: cookiesActive ? '0 0 10px var(--accent-green)' : 'none' }}></span>
+            Bypass YouTube Bot Block (Cookies)
+          </h3>
+          
+          <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', lineHeight: '1.4', marginBottom: '1rem' }}>
+            YouTube sometimes blocks cloud server IPs with a bot detection screen. To bypass this, paste your browser's YouTube cookies in <strong>Netscape cookie format</strong> below.
+            <br />
+            <span style={{ fontSize: '0.75rem', display: 'inline-block', marginTop: '0.25rem', color: 'var(--accent-cyan)' }}>
+              How to get: Install browser extension <em>"Get cookies.txt LOCALLY"</em>, open YouTube, export cookies, and copy/paste their content here.
+            </span>
+          </p>
+
+          <form onSubmit={handleSaveCookies}>
+            <textarea
+              style={{
+                width: '100%',
+                height: '100px',
+                background: 'rgba(8, 10, 20, 0.6)',
+                border: '1px solid var(--glass-border)',
+                borderRadius: '8px',
+                padding: '0.75rem',
+                color: '#fff',
+                fontSize: '0.8rem',
+                fontFamily: 'monospace',
+                resize: 'vertical',
+                outline: 'none',
+                marginBottom: '0.75rem'
+              }}
+              placeholder="# Netscape HTTP Cookie File&#10;.youtube.com	TRUE	/	TRUE	1799999999	SID	..."
+              value={cookiesText}
+              onChange={(e) => setCookiesText(e.target.value)}
+            />
+            
+            {saveSuccess && (
+              <div style={{ fontSize: '0.85rem', color: 'var(--accent-green)', fontWeight: '600', marginBottom: '0.75rem' }}>
+                ✓ {saveSuccess}
+              </div>
+            )}
+            
+            <div style={{ display: 'flex', gap: '0.75rem' }}>
+              <button 
+                type="submit" 
+                className="download-submit-button"
+                style={{ width: 'auto', padding: '0.5rem 1.5rem', fontSize: '0.85rem', height: '36px', background: 'var(--primary-glow)' }}
+              >
+                Save Cookies
+              </button>
+              
+              {cookiesActive && (
+                <button 
+                  type="button" 
+                  onClick={handleClearCookies}
+                  style={{
+                    background: 'transparent',
+                    border: '1px solid var(--accent-rose)',
+                    color: 'var(--accent-rose)',
+                    borderRadius: '8px',
+                    padding: '0.5rem 1.25rem',
+                    fontSize: '0.85rem',
+                    cursor: 'pointer',
+                    height: '36px'
+                  }}
+                >
+                  Clear Cookies
+                </button>
+              )}
+            </div>
           </form>
         </div>
       )}

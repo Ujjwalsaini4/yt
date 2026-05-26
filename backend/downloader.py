@@ -74,6 +74,59 @@ def get_ffmpeg_path():
     # Fallback to system path (returns None, let yt-dlp search PATH)
     return None
 
+def parse_info_response(info, url):
+    title = info.get('title', 'Unknown Title')
+    thumbnail = info.get('thumbnail', '')
+    duration = info.get('duration', 0)
+    uploader = info.get('uploader', 'Unknown Creator')
+    description = info.get('description', '')
+    extractor_key = info.get('extractor_key', '')
+    
+    # Determine available resolutions
+    formats = info.get('formats', [])
+    heights = set()
+    
+    for fmt in formats:
+        h = fmt.get('height')
+        if h:
+            heights.add(h)
+    
+    # Standard resolution configurations
+    resolutions = []
+    if any(h >= 2160 for h in heights):
+        resolutions.append({'id': '2160p', 'label': '4K (2160p)', 'height': 2160})
+    if any(h >= 1440 for h in heights):
+        resolutions.append({'id': '1440p', 'label': '2K (1440p)', 'height': 1440})
+    if any(h >= 1080 for h in heights):
+        resolutions.append({'id': '1080p', 'label': '1080p Full HD', 'height': 1080})
+    if any(h >= 720 for h in heights):
+        resolutions.append({'id': '720p', 'label': '720p HD', 'height': 720})
+    if any(h >= 480 for h in heights):
+        resolutions.append({'id': '480p', 'label': '480p SD', 'height': 480})
+    if any(h >= 360 for h in heights):
+        resolutions.append({'id': '360p', 'label': '360p Low', 'height': 360})
+        
+    # Default options if heights list is empty (e.g. Tiktok/Instagram)
+    if not resolutions:
+        resolutions = [
+            {'id': 'best', 'label': 'Best Quality', 'height': 1080},
+            {'id': '720p', 'label': '720p HD', 'height': 720},
+            {'id': '360p', 'label': '360p Low', 'height': 360}
+        ]
+        
+    resolutions.append({'id': 'audio', 'label': 'Audio Only (MP3)', 'height': 0})
+    
+    return {
+        'title': title,
+        'thumbnail': thumbnail,
+        'duration': duration,
+        'uploader': uploader,
+        'description': description[:300] + '...' if description and len(description) > 300 else description,
+        'platform': extractor_key,
+        'resolutions': resolutions,
+        'original_url': url
+    }
+
 def get_video_info(url):
     ydl_opts = {
         'skip_download': True,
@@ -81,75 +134,37 @@ def get_video_info(url):
         'no_warnings': True,
     }
     
+    # Check if local cookies.txt exists (allows custom cookie overrides to bypass bot check)
+    backend_dir = os.path.dirname(os.path.abspath(__file__))
+    cookies_path = os.path.join(backend_dir, "cookies.txt")
+    if os.path.exists(cookies_path):
+        ydl_opts['cookiefile'] = cookies_path
+        
     ffmpeg_dir = get_ffmpeg_path()
     if ffmpeg_dir:
         ydl_opts['ffmpeg_location'] = ffmpeg_dir
         
-    with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-        try:
+    try:
+        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             info = ydl.extract_info(url, download=False)
-            
-            # Format outputs
-            title = info.get('title', 'Unknown Title')
-            thumbnail = info.get('thumbnail', '')
-            duration = info.get('duration', 0)
-            uploader = info.get('uploader', 'Unknown Creator')
-            description = info.get('description', '')
-            extractor_key = info.get('extractor_key', '')
-            
-            # Determine available resolutions
-            formats = info.get('formats', [])
-            heights = set()
-            
-            for fmt in formats:
-                h = fmt.get('height')
-                if h:
-                    heights.add(h)
-            
-            # Standard resolution configurations
-            resolutions = []
-            if any(h >= 2160 for h in heights):
-                resolutions.append({'id': '2160p', 'label': '4K (2160p)', 'height': 2160})
-            if any(h >= 1440 for h in heights):
-                resolutions.append({'id': '1440p', 'label': '2K (1440p)', 'height': 1440})
-            if any(h >= 1080 for h in heights):
-                resolutions.append({'id': '1080p', 'label': '1080p Full HD', 'height': 1080})
-            if any(h >= 720 for h in heights):
-                resolutions.append({'id': '720p', 'label': '720p HD', 'height': 720})
-            if any(h >= 480 for h in heights):
-                resolutions.append({'id': '480p', 'label': '480p SD', 'height': 480})
-            if any(h >= 360 for h in heights):
-                resolutions.append({'id': '360p', 'label': '360p Low', 'height': 360})
-                
-            # If no height is found (e.g. on Instagram/TikTok where formats might not report heights clearly),
-            # or if resolutions list is empty, default to standard options
-            if not resolutions:
-                resolutions = [
-                    {'id': 'best', 'label': 'Best Quality', 'height': 1080},
-                    {'id': '720p', 'label': '720p HD', 'height': 720},
-                    {'id': '360p', 'label': '360p Low', 'height': 360}
-                ]
-                
-            # Add audio option to the front or back
-            resolutions.append({'id': 'audio', 'label': 'Audio Only (MP3)', 'height': 0})
-            
-            return {
-                'title': title,
-                'thumbnail': thumbnail,
-                'duration': duration,
-                'uploader': uploader,
-                'description': description[:300] + '...' if description and len(description) > 300 else description,
-                'platform': extractor_key,
-                'resolutions': resolutions,
-                'original_url': url
-            }
-        except Exception as e:
-            raise Exception(f"Failed to fetch video info: {str(e)}")
+            return parse_info_response(info, url)
+    except Exception as e:
+        error_msg = str(e)
+        # Check if error is bot/sign-in verification
+        if "Sign in to confirm" in error_msg or "confirm you're not a bot" in error_msg:
+            print("YouTube bot block detected. Retrying metadata fetch using iOS client impersonation...")
+            ydl_opts['extractor_args'] = {'youtube': {'player_client': ['ios']}}
+            try:
+                with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                    info = ydl.extract_info(url, download=False)
+                    return parse_info_response(info, url)
+            except Exception as ios_err:
+                raise Exception(f"Failed bot verification check even with iOS player fallback: {str(ios_err)}")
+        raise e
 
 def download_video_sync(url, resolution_id, output_dir, reporter):
     # Formulate format selector
     if resolution_id == 'audio':
-        # Download best audio and convert to mp3
         format_selector = 'bestaudio/best'
         postprocessors = [{
             'key': 'FFmpegExtractAudio',
@@ -157,7 +172,6 @@ def download_video_sync(url, resolution_id, output_dir, reporter):
             'preferredquality': '192',
         }]
     else:
-        # Determine height constraint
         height_map = {
             '2160p': 2160,
             '1440p': 1440,
@@ -169,8 +183,6 @@ def download_video_sync(url, resolution_id, output_dir, reporter):
         height = height_map.get(resolution_id)
         
         if height:
-            # yt-dlp format selection: get best video that matches/is under height + best audio
-            # and merge them.
             format_selector = f'bestvideo[height<={height}]+bestaudio/best'
         else:
             format_selector = 'bestvideo+bestaudio/best'
@@ -188,21 +200,41 @@ def download_video_sync(url, resolution_id, output_dir, reporter):
     
     if resolution_id != 'audio':
         ydl_opts['merge_output_format'] = 'mp4'
-    
+        
     if postprocessors:
         ydl_opts['postprocessors'] = postprocessors
+
+    # Apply cookies if present
+    backend_dir = os.path.dirname(os.path.abspath(__file__))
+    cookies_path = os.path.join(backend_dir, "cookies.txt")
+    if os.path.exists(cookies_path):
+        ydl_opts['cookiefile'] = cookies_path
 
     ffmpeg_dir = get_ffmpeg_path()
     if ffmpeg_dir:
         ydl_opts['ffmpeg_location'] = ffmpeg_dir
         
-    with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-        info = ydl.extract_info(url, download=True)
-        filename = ydl.prepare_filename(info)
-        
-        # If we downloaded audio, the extension changes to .mp3 due to post-processing
-        if resolution_id == 'audio':
-            base, _ = os.path.splitext(filename)
-            filename = base + ".mp3"
-            
-        return filename
+    try:
+        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+            info = ydl.extract_info(url, download=True)
+            filename = ydl.prepare_filename(info)
+            if resolution_id == 'audio':
+                base, _ = os.path.splitext(filename)
+                filename = base + ".mp3"
+            return filename
+    except Exception as e:
+        error_msg = str(e)
+        if "Sign in to confirm" in error_msg or "confirm you're not a bot" in error_msg:
+            print("YouTube bot block detected. Retrying video download using iOS client impersonation...")
+            ydl_opts['extractor_args'] = {'youtube': {'player_client': ['ios']}}
+            try:
+                with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                    info = ydl.extract_info(url, download=True)
+                    filename = ydl.prepare_filename(info)
+                    if resolution_id == 'audio':
+                        base, _ = os.path.splitext(filename)
+                        filename = base + ".mp3"
+                    return filename
+            except Exception as ios_err:
+                raise Exception(f"Download blocked by YouTube bot protection even with iOS player fallback: {str(ios_err)}")
+        raise e
